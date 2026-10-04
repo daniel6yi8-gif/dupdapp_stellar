@@ -84,3 +84,6 @@ Grafana/Loki/Promtail configs under [`grafana/`](grafana/) and [`docker-compose.
 
 <!-- handsoff-issue-1094 -->
 - #1094: merchant_registry and payment_escrow: a merchant suspended after deposit is still paid out by release/release_partial
+
+<!-- handsoff-issue-1105 -->
+- #1105: payment_escrow::emergency_drain sweeps the ENTIRE contract balance, including active/undisputed escrows, not just stuck funds
