@@ -87,3 +87,6 @@ Grafana/Loki/Promtail configs under [`grafana/`](grafana/) and [`docker-compose.
 
 <!-- handsoff-issue-1105 -->
 - #1105: payment_escrow::emergency_drain sweeps the ENTIRE contract balance, including active/undisputed escrows, not just stuck funds
+
+<!-- handsoff-issue-1106 -->
+- #1106: payment_escrow::emergency_drain only covers the USDC token — XLM-denominated escrows are unreachable by the emergency path
