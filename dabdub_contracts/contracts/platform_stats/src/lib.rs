@@ -61,6 +61,16 @@ impl PlatformStatsContract {
         env.storage().instance().set(&DataKey::TotalMerchants, &next);
     }
 
+    /// Admin-only: record a merchant termination, decrementing the active
+    /// merchant count. Saturates at zero so the counter cannot underflow.
+    pub fn record_merchant_terminated(env: Env, caller: Address) {
+        caller.require_auth();
+        Self::require_admin(&env, &caller);
+        let prev: u32 = env.storage().instance().get(&DataKey::TotalMerchants).unwrap();
+        let next = prev.saturating_sub(1);
+        env.storage().instance().set(&DataKey::TotalMerchants, &next);
+    }
+
     /// Admin-only: record a payment. If `settled`, adds to settled USD volume
     /// and increments the rolling 24h active-payments bucket.
     pub fn record_payment(env: Env, caller: Address, amount_usd: i128, settled: bool) {
@@ -86,6 +96,23 @@ impl PlatformStatsContract {
         let key = DataKey::ActiveBucket(bucket);
         let count: u32 = env.storage().instance().get(&key).unwrap_or(0);
         env.storage().instance().set(&key, &(count + 1));
+    }
+
+    /// Admin-only: reverse a previously settled payment (refund or dispute
+    /// resolution), decrementing settled USD volume. Saturates at zero so the
+    /// counter cannot underflow.
+    pub fn record_settlement_reversed(env: Env, caller: Address, amount_usd: i128) {
+        caller.require_auth();
+        Self::require_admin(&env, &caller);
+        let vol: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalSettledVolumeUsd)
+            .unwrap();
+        let next = vol.saturating_sub(amount_usd);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSettledVolumeUsd, &next);
     }
 
     /// Admin-only: reflect partner API health status.
