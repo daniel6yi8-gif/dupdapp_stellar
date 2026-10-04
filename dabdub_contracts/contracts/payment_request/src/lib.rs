@@ -86,6 +86,10 @@ impl PaymentRequestContract {
     ) -> Result<u64, Error> {
         requester.require_auth();
 
+        if amount <= 0 {
+            panic!("amount must be > 0");
+        }
+
         let id: u64 = env
             .storage()
             .instance()
