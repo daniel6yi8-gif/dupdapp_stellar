@@ -27,15 +27,15 @@ fn test_payment_lifecycle_success() {
     assert_eq!(payment.amount, amount);
 
     // 2. Confirm Payment
-    client.confirm(&payment_id);
+    client.confirm(&payment_id, &merchant);
     assert_eq!(client.get_payment(&payment_id).status, PaymentStatus::Confirmed);
 
     // 3. Set Settling
-    client.set_settling(&payment_id);
+    client.set_settling(&payment_id, &merchant);
     assert_eq!(client.get_payment(&payment_id).status, PaymentStatus::Settling);
 
     // 4. Settle
-    client.settle(&payment_id);
+    client.settle(&payment_id, &merchant);
     assert_eq!(client.get_payment(&payment_id).status, PaymentStatus::Settled);
 }
 
@@ -52,10 +52,10 @@ fn test_direct_settlement_from_confirmed() {
     let payment_id = String::from_str(&env, "pay_123");
     
     client.create_payment(&payment_id, &merchant, &100, &asset, &1000);
-    client.confirm(&payment_id);
+    client.confirm(&payment_id, &merchant);
     
     // Skipping the settling state is rejected
-    client.settle(&payment_id);
+    client.settle(&payment_id, &merchant);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn test_invalid_settle_from_pending() {
     client.create_payment(&payment_id, &merchant, &100, &asset, &1000);
     
     // Try to settle directly from pending
-    client.settle(&payment_id);
+    client.settle(&payment_id, &merchant);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn test_payment_expiry() {
     // Advance time past expiry
     env.ledger().set_timestamp(101);
 
-    client.expire(&payment_id);
+    client.expire(&payment_id, &merchant);
     assert_eq!(client.get_payment(&payment_id).status, PaymentStatus::Expired);
 }
 
@@ -116,7 +116,7 @@ fn test_early_expiry_fails() {
 
     // Try to expire at t=50
     env.ledger().set_timestamp(50);
-    client.expire(&payment_id);
+    client.expire(&payment_id, &merchant);
 }
 
 #[test]
@@ -131,9 +131,9 @@ fn test_payment_failure() {
     let payment_id = String::from_str(&env, "pay_123");
 
     client.create_payment(&payment_id, &merchant, &100, &asset, &1000);
-    client.confirm(&payment_id);
+    client.confirm(&payment_id, &merchant);
     
-    client.fail(&payment_id);
+    client.fail(&payment_id, &merchant);
     assert_eq!(client.get_payment(&payment_id).status, PaymentStatus::Failed);
 }
 
@@ -150,11 +150,11 @@ fn test_fail_after_settled_panics() {
     let payment_id = String::from_str(&env, "pay_123");
 
     client.create_payment(&payment_id, &merchant, &100, &asset, &1000);
-    client.confirm(&payment_id);
-    client.set_settling(&payment_id);
-    client.settle(&payment_id);
+    client.confirm(&payment_id, &merchant);
+    client.set_settling(&payment_id, &merchant);
+    client.settle(&payment_id, &merchant);
     
-    client.fail(&payment_id);
+    client.fail(&payment_id, &merchant);
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn test_empty_payment_id_rejected() {
 
 /// Creates a payment with mocked auth, then clears all auths so subsequent
 /// calls behave like an unrelated third-party caller.
-fn setup_unauthorized(env: &Env) -> (PaymentRequestContractClient<'_>, String) {
+fn setup_unauthorized(env: &Env) -> (PaymentRequestContractClient<'_>, String, Address) {
     env.mock_all_auths();
     let contract_id = env.register_contract(None, PaymentRequestContract);
     let client = PaymentRequestContractClient::new(env, &contract_id);
@@ -183,53 +183,53 @@ fn setup_unauthorized(env: &Env) -> (PaymentRequestContractClient<'_>, String) {
     env.ledger().set_timestamp(0);
     client.create_payment(&payment_id, &merchant, &100, &asset, &1000);
     env.set_auths(&[]);
-    (client, payment_id)
+    (client, payment_id, merchant)
 }
 
 #[test]
 fn test_unauthorized_confirm_rejected() {
     let env = Env::default();
-    let (client, id) = setup_unauthorized(&env);
-    assert!(client.try_confirm(&id).is_err());
+    let (client, id, merchant) = setup_unauthorized(&env);
+    assert!(client.try_confirm(&id, &merchant).is_err());
     assert_eq!(client.get_payment(&id).status, PaymentStatus::Pending);
 }
 
 #[test]
 fn test_unauthorized_set_settling_rejected() {
     let env = Env::default();
-    let (client, id) = setup_unauthorized(&env);
+    let (client, id, merchant) = setup_unauthorized(&env);
     env.mock_all_auths();
-    client.confirm(&id);
+    client.confirm(&id, &merchant);
     env.set_auths(&[]);
-    assert!(client.try_set_settling(&id).is_err());
+    assert!(client.try_set_settling(&id, &merchant).is_err());
     assert_eq!(client.get_payment(&id).status, PaymentStatus::Confirmed);
 }
 
 #[test]
 fn test_unauthorized_settle_rejected() {
     let env = Env::default();
-    let (client, id) = setup_unauthorized(&env);
+    let (client, id, merchant) = setup_unauthorized(&env);
     env.mock_all_auths();
-    client.confirm(&id);
-    client.set_settling(&id);
+    client.confirm(&id, &merchant);
+    client.set_settling(&id, &merchant);
     env.set_auths(&[]);
-    assert!(client.try_settle(&id).is_err());
+    assert!(client.try_settle(&id, &merchant).is_err());
     assert_eq!(client.get_payment(&id).status, PaymentStatus::Settling);
 }
 
 #[test]
 fn test_unauthorized_fail_rejected() {
     let env = Env::default();
-    let (client, id) = setup_unauthorized(&env);
-    assert!(client.try_fail(&id).is_err());
+    let (client, id, merchant) = setup_unauthorized(&env);
+    assert!(client.try_fail(&id, &merchant).is_err());
     assert_eq!(client.get_payment(&id).status, PaymentStatus::Pending);
 }
 
 #[test]
 fn test_unauthorized_expire_rejected() {
     let env = Env::default();
-    let (client, id) = setup_unauthorized(&env);
+    let (client, id, merchant) = setup_unauthorized(&env);
     env.ledger().set_timestamp(2000);
-    assert!(client.try_expire(&id).is_err());
+    assert!(client.try_expire(&id, &merchant).is_err());
     assert_eq!(client.get_payment(&id).status, PaymentStatus::Pending);
 }

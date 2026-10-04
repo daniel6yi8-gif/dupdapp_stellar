@@ -41,6 +41,7 @@ const MAX_ID_LEN: u32 = 64;
 #[contracttype]
 pub enum DataKey {
     Payment(String),
+    Admin,
 }
 
 #[contract]
@@ -64,10 +65,21 @@ fn save_payment(env: &Env, key: &DataKey, payment: &Payment) {
     }
 }
 
-/// Load a payment and require authorization from its merchant.
-fn load_authorized(env: &Env, key: &DataKey) -> Payment {
+/// Load a payment and require authorization from an authorized caller.
+///
+/// The caller must be either the payment's merchant or the contract's
+/// designated admin/settlement-service address. Any other address reverts.
+fn load_authorized(env: &Env, key: &DataKey, caller: &Address) -> Payment {
+    caller.require_auth();
     let payment: Payment = env.storage().persistent().get(key).expect("Payment not found");
-    payment.merchant.require_auth();
+    let admin: Option<Address> = env.storage().persistent().get(&DataKey::Admin);
+    let is_admin = match admin {
+        Some(a) => a == *caller,
+        None => false,
+    };
+    if *caller != payment.merchant && !is_admin {
+        panic!("Unauthorized: caller is not the merchant or admin");
+    }
     payment
 }
 
@@ -113,9 +125,9 @@ impl PaymentRequestContract {
     }
 
     /// Mark payment as confirmed (user has paid).
-    pub fn confirm(env: Env, id: String) {
+    pub fn confirm(env: Env, caller: Address, id: String) {
         let key = DataKey::Payment(id.clone());
-        let mut payment = load_authorized(&env, &key);
+        let mut payment = load_authorized(&env, &key, &caller);
 
         if payment.status != PaymentStatus::Pending {
             panic!("Invalid transition: can only confirm pending payments");
@@ -135,9 +147,9 @@ impl PaymentRequestContract {
     }
 
     /// Move payment to settling state (initiate payout to merchant).
-    pub fn set_settling(env: Env, id: String) {
+    pub fn set_settling(env: Env, caller: Address, id: String) {
         let key = DataKey::Payment(id.clone());
-        let mut payment = load_authorized(&env, &key);
+        let mut payment = load_authorized(&env, &key, &caller);
 
         if payment.status != PaymentStatus::Confirmed {
             panic!("Invalid transition: can only set settling from confirmed");
@@ -153,9 +165,9 @@ impl PaymentRequestContract {
     }
 
     /// Mark payment as settled (funds received by merchant).
-    pub fn settle(env: Env, id: String) {
+    pub fn settle(env: Env, caller: Address, id: String) {
         let key = DataKey::Payment(id.clone());
-        let mut payment = load_authorized(&env, &key);
+        let mut payment = load_authorized(&env, &key, &caller);
 
         // Settling is a mandatory intermediate step: `set_settling` signals that a
         // payout is in flight, so settle may only follow it.
@@ -173,9 +185,9 @@ impl PaymentRequestContract {
     }
 
     /// Mark payment as failed.
-    pub fn fail(env: Env, id: String) {
+    pub fn fail(env: Env, caller: Address, id: String) {
         let key = DataKey::Payment(id.clone());
-        let mut payment = load_authorized(&env, &key);
+        let mut payment = load_authorized(&env, &key, &caller);
 
         if payment.status == PaymentStatus::Settled || payment.status == PaymentStatus::Expired {
             panic!("Cannot fail a finalized payment");
@@ -191,9 +203,9 @@ impl PaymentRequestContract {
     }
 
     /// Mark payment as expired.
-    pub fn expire(env: Env, id: String) {
+    pub fn expire(env: Env, caller: Address, id: String) {
         let key = DataKey::Payment(id.clone());
-        let mut payment = load_authorized(&env, &key);
+        let mut payment = load_authorized(&env, &key, &caller);
 
         if payment.status != PaymentStatus::Pending && payment.status != PaymentStatus::Confirmed {
             panic!("Cannot expire a finalized or settling payment");
