@@ -84,3 +84,6 @@ Grafana/Loki/Promtail configs under [`grafana/`](grafana/) and [`docker-compose.
 
 <!-- handsoff-issue-1094 -->
 - #1094: merchant_registry and payment_escrow: a merchant suspended after deposit is still paid out by release/release_partial
+
+<!-- handsoff-issue-1107 -->
+- #1107: payment_escrow::dispute's _reason parameter is misleadingly underscore-prefixed despite being used, and has no validation
