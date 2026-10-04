@@ -57,7 +57,8 @@ impl PlatformStatsContract {
         caller.require_auth();
         Self::require_admin(&env, &caller);
         let prev: u32 = env.storage().instance().get(&DataKey::TotalMerchants).unwrap();
-        env.storage().instance().set(&DataKey::TotalMerchants, &(prev + 1));
+        let next = prev.checked_add(1).expect("counter overflow");
+        env.storage().instance().set(&DataKey::TotalMerchants, &next);
     }
 
     /// Admin-only: record a payment. If `settled`, adds to settled USD volume
@@ -67,7 +68,8 @@ impl PlatformStatsContract {
         Self::require_admin(&env, &caller);
 
         let tp: u32 = env.storage().instance().get(&DataKey::TotalPayments).unwrap();
-        env.storage().instance().set(&DataKey::TotalPayments, &(tp + 1));
+        let next_tp = tp.checked_add(1).expect("counter overflow");
+        env.storage().instance().set(&DataKey::TotalPayments, &next_tp);
 
         if settled {
             let vol: i128 = env
