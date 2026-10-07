@@ -65,6 +65,68 @@ fn test_record_payment_requires_admin() {
 }
 
 #[test]
+fn test_record_merchant_terminated_decrements_total_merchants() {
+    let (_env, client, admin) = setup();
+    client.record_merchant(&admin);
+    client.record_merchant(&admin);
+    assert_eq!(client.stats().total_merchants, 2);
+
+    client.record_merchant_terminated(&admin);
+    assert_eq!(client.stats().total_merchants, 1);
+
+    client.record_merchant_terminated(&admin);
+    assert_eq!(client.stats().total_merchants, 0);
+}
+
+#[test]
+fn test_record_merchant_terminated_saturates_at_zero() {
+    let (_env, client, admin) = setup();
+    // No merchants recorded yet; termination must not underflow.
+    client.record_merchant_terminated(&admin);
+    assert_eq!(client.stats().total_merchants, 0);
+}
+
+#[test]
+#[should_panic(expected = "not admin")]
+fn test_record_merchant_terminated_requires_admin() {
+    let (env, client, _admin) = setup();
+    let attacker = Address::generate(&env);
+    client.record_merchant_terminated(&attacker);
+}
+
+#[test]
+fn test_record_settlement_reversed_decrements_volume() {
+    let (_env, client, admin) = setup();
+    client.record_payment(&admin, &10_000_000i128, &true);
+    client.record_payment(&admin, &5_000_000i128, &true);
+    assert_eq!(client.stats().total_settled_volume_usd, 15_000_000);
+
+    client.record_settlement_reversed(&admin, &5_000_000i128);
+    assert_eq!(client.stats().total_settled_volume_usd, 10_000_000);
+
+    // total_payments is a lifetime counter and is not affected by a reversal.
+    assert_eq!(client.stats().total_payments, 2);
+}
+
+#[test]
+fn test_record_settlement_reversed_saturates_at_zero() {
+    let (_env, client, admin) = setup();
+    client.record_payment(&admin, &1_000_000i128, &true);
+
+    // Reversing more than was ever settled must not underflow.
+    client.record_settlement_reversed(&admin, &5_000_000i128);
+    assert_eq!(client.stats().total_settled_volume_usd, 0);
+}
+
+#[test]
+#[should_panic(expected = "not admin")]
+fn test_record_settlement_reversed_requires_admin() {
+    let (env, client, _admin) = setup();
+    let attacker = Address::generate(&env);
+    client.record_settlement_reversed(&attacker, &100i128);
+}
+
+#[test]
 fn test_partner_health_status_toggle() {
     let (env, client, admin) = setup();
     assert!(client.stats().health.partner_ok);
