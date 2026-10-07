@@ -84,3 +84,12 @@ Grafana/Loki/Promtail configs under [`grafana/`](grafana/) and [`docker-compose.
 
 <!-- handsoff-issue-1094 -->
 - #1094: merchant_registry and payment_escrow: a merchant suspended after deposit is still paid out by release/release_partial
+
+<!-- handsoff-issue-1107 -->
+- #1107: payment_escrow::dispute's _reason parameter is misleadingly underscore-prefixed despite being used, and has no validation
+
+<!-- handsoff-issue-1108 -->
+- #1108: payment_escrow: dispute resolution is all-or-nothing on the remainder even after a merchant has already delivered via partial release
+
+<!-- handsoff-issue-1113 -->
+- #1113: payment_escrow: the highest-risk functions (upgrade, emergency_drain's XLM path, set_registry(None)) have the thinnest test coverage
