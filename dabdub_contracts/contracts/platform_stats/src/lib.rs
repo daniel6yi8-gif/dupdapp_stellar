@@ -71,7 +71,18 @@ impl PlatformStatsContract {
         caller.require_auth();
         Self::require_admin(&env, &caller);
         let prev: u32 = env.storage().instance().get(&DataKey::TotalMerchants).unwrap();
-        env.storage().instance().set(&DataKey::TotalMerchants, &(prev + 1));
+        let next = prev.checked_add(1).expect("counter overflow");
+        env.storage().instance().set(&DataKey::TotalMerchants, &next);
+    }
+
+    /// Admin-only: record a merchant termination, decrementing the active
+    /// merchant count. Saturates at zero so the counter cannot underflow.
+    pub fn record_merchant_terminated(env: Env, caller: Address) {
+        caller.require_auth();
+        Self::require_admin(&env, &caller);
+        let prev: u32 = env.storage().instance().get(&DataKey::TotalMerchants).unwrap();
+        let next = prev.saturating_sub(1);
+        env.storage().instance().set(&DataKey::TotalMerchants, &next);
     }
 
     /// Admin-only: record a payment. If `settled`, adds to settled USD volume
@@ -96,7 +107,8 @@ impl PlatformStatsContract {
         Self::require_admin(&env, &caller);
 
         let tp: u32 = env.storage().instance().get(&DataKey::TotalPayments).unwrap();
-        env.storage().instance().set(&DataKey::TotalPayments, &(tp + 1));
+        let next_tp = tp.checked_add(1).expect("counter overflow");
+        env.storage().instance().set(&DataKey::TotalPayments, &next_tp);
 
         if settled {
             let vol: i128 = env
@@ -116,6 +128,23 @@ impl PlatformStatsContract {
         env.storage()
             .persistent()
             .extend_ttl(&key, ACTIVE_BUCKET_TTL_LEDGERS, ACTIVE_BUCKET_TTL_LEDGERS);
+    }
+
+    /// Admin-only: reverse a previously settled payment (refund or dispute
+    /// resolution), decrementing settled USD volume. Saturates at zero so the
+    /// counter cannot underflow.
+    pub fn record_settlement_reversed(env: Env, caller: Address, amount_usd: i128) {
+        caller.require_auth();
+        Self::require_admin(&env, &caller);
+        let vol: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalSettledVolumeUsd)
+            .unwrap();
+        let next = vol.saturating_sub(amount_usd);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSettledVolumeUsd, &next);
     }
 
     /// Admin-only: reflect partner API health status.
